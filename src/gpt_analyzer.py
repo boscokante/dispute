@@ -1,90 +1,118 @@
-import openai
+from openai import OpenAI
 from config import OPENAI_API_KEY
 
-openai.api_key = OPENAI_API_KEY
+def format_dispute_letter(name, report_number, date, account_details, analysis_points):
+    """
+    Formats the dispute letter in a structured format with detailed points and sub-points.
+    """
+    letter = f"""Name: {name}
 
-def step_a_identify_detailed_errors(pdf_text: str) -> str:
-    """
-    Step A: Identify an exhaustive list of errors from the credit report.
-    """
-    system_prompt = "You are a thorough credit report analyst."
+Report: {report_number}
+
+Date: {date}
+
+Account Name: {account_details.get('bank_name', 'N/A')}
+Account Address: {account_details.get('address', 'N/A')}
+Account Phone: {account_details.get('phone', 'N/A')}
+Account number: {account_details.get('account_number', 'N/A')}
+
+Summary: This document details errors and omissions in the {account_details.get('bank_name', '')} 
+entry on my credit report. The account shows several inconsistencies and missing information 
+that require clarification. Below is a structured list of these errors and omissions.
+
+"""
     
-    user_prompt = f"""
-    I have the following PDF text from a credit report with a single negative tradeline. 
-    I want you to identify every possible error, omission, or inconsistency in thorough detail.
-    DO NOT summarize and DO NOT write a dispute letter yet. 
-    Instead, list each category of errors carefully, referencing specific data in the PDF.
+    # Add analysis points with proper formatting
+    for i, point in enumerate(analysis_points, 1):
+        # Main point
+        letter += f"\n{i}. {point['main_point']}\n"
+        
+        # Sub-points with a, b, c...
+        for j, sub_point in enumerate(point.get('sub_points', []), 97):  # 97 is ASCII for 'a'
+            letter += f"\n    {chr(j)}. Error: {sub_point['description']}\n"
+            
+            # Sub-sub-points with roman numerals
+            for k, detail in enumerate(sub_point.get('details', []), 1):
+                letter += f"\n        {to_roman(k)}. {detail}\n"
+    
+    return letter
 
-    Use the following checklist, and add more categories if you see relevant issues:
-    1. Charge-Off Status vs. Available Credit
-    2. Balance Consistency Over Time
-    3. Scheduled/Actual Payment Data
-    4. Amount Past Due Over Time
-    5. Payment History Inconsistencies 
-    6. Credit Limit vs. Negative Available Credit
-    7. Charge-Off Amount vs. Balance
-    8. Dates of First Delinquency and Closure
-    9. Missing Account Details (e.g., Date of Last Activity, High Credit, Term Duration)
-    10. Months Reviewed
-    11. Creditor Classification
-    12. Additional Comments/Discrepancies
+def to_roman(num):
+    """Convert integer to Roman numeral."""
+    val = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    syb = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+    roman_num = ''
+    i = 0
+    while num > 0:
+        for _ in range(num // val[i]):
+            roman_num += syb[i]
+            num -= val[i]
+        i += 1
+    return roman_num.lower()
 
-    FORMAT:
-    - Numbered or bullet-pointed list
-    - Each point should have "Error:" or "Discrepancy:" lines 
-      referencing exact or approximate text from the PDF.
-    - Provide as many details as possible. 
-    - This is not a dispute letter, just the error analysis.
-
-    PDF TEXT:
-    {pdf_text}
+def analyze_credit_report(report_text):
     """
-
-    response = openai.chat.completions.create(
+    Analyzes credit report text to identify issues and structure them in a detailed format.
+    """
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    
+    analysis_prompt = """
+    Analyze this credit report section and identify issues in these categories:
+    1. Status and Balance Inconsistencies
+    2. Payment History Issues
+    3. Credit Limit and Available Credit Discrepancies
+    4. Dates and Timeline Issues
+    5. Missing or Incomplete Information
+    
+    Format each issue with:
+    - A clear main point
+    - Specific sub-points describing each error
+    - Detailed questions or clarifications needed
+    
+    Keep the technical accuracy of the current analysis but format it like a formal dispute letter.
+    """
+    
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0.0,
-        max_tokens=3000
+            {"role": "system", "content": analysis_prompt},
+            {"role": "user", "content": report_text}
+        ]
     )
-    return response.choices[0].message.content
-
-def step_b_format_final(detailed_errors: str) -> str:
-    """
-    Step B: Format the detailed errors into a final dispute letter.
-    """
-    system_prompt = "You are a thorough credit report analyst."
     
-    user_prompt = f"""
-    We have a detailed error list from a credit report. Please convert it into
-    the exact final format shown in the 'desired_output_example' below.
+    analysis = parse_gpt_response(response.choices[0].message.content)
+    return analysis
 
-    DETAILED ERRORS:
-    {detailed_errors}
-
-    Instructions:
-    1. Use the numbering style:
-       (1), (2), (3)...
-         a. Error: ...
-         i. question...
-         ii. question...
-    2. Indent exactly as in the example (with spaces).
-    3. Do NOT use "Questions" headings—just use "i., ii." lines after "Error:".
-    4. End with a "Requested Action" section.
-    5. Add "Below Are Excerpts from Credit Report..." at the end if appropriate.
-    6. Keep the content of 'detailed_errors', but rephrase as needed
-       to match the final style.
+def parse_gpt_response(gpt_response):
     """
+    Parses GPT response into structured format for the letter.
+    Returns a list of dictionaries containing main points, sub-points, and details.
+    """
+    # Implementation of parsing logic
+    # This would convert the GPT response into structured data
+    # You would implement the actual parsing based on your GPT response format
+    
+    # Example structure:
+    analysis_points = [
+        {
+            "main_point": "Balance and Status Inconsistencies",
+            "sub_points": [
+                {
+                    "description": "The account is marked as \"Charge-Off,\" but shows contradictory available credit",
+                    "details": [
+                        "How can a charged-off account have available credit?",
+                        "What is the significance of the negative available credit?"
+                    ]
+                }
+            ]
+        }
+    ]
+    
+    return analysis_points
 
-    response = openai.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0.0,
-        max_tokens=3000
-    )
-    return response.choices[0].message.content
+def generate_dispute_letter(report_text, name, report_number, date, account_details):
+    """
+    Main function to generate the complete dispute letter.
+    """
+    analysis_points = analyze_credit_report(report_text)
+    return format_dispute_letter(name, report_number, date, account_details, analysis_points)
